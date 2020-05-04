@@ -17,6 +17,7 @@
 #   [comuni_giorno.csv]
 
 if( !require(tidyverse)) install.packages("tidyverse")
+if( !require(lubridate)) install.packages("lubridate")
 
 # si importa il dataset con i decessi suddivisi per comune
 db <- read_csv("data/raw/comune_raw.csv", 
@@ -34,10 +35,8 @@ lomb1 <- select(lomb1, -c("REG","NOME_REGIONE"))
 lomb1 <- lomb1 %>% gather(key = "SESSO_ANNO", value = "DECESSO",MASCHI_15:TOTALE_20)
 #2 si divide la colonna "SESSO_ANNO"
 lomb1 <- lomb1 %>% separate(SESSO_ANNO, c("SESSO", "ANNO"), "_") 
-#3 si escludono le righe senza decessi
-#lomb1 <- lomb1[which(lomb1$DECESSO>0), ]
 #4 si eliminano i dati mancanti
-lomb1 <- lomb1 %>% filter(DECESSO != 9999)
+lomb1 <- lomb1 %>% mutate(DECESSO = ifelse(DECESSO == 9999, NA, DECESSO))
 #5 si formatta la data
 lomb1 <- lomb1 %>% mutate(DATA = as.Date(paste0(lomb1$GE,lomb1$ANNO), format = "%m%d%y"))
 #5.1 si escludono le date inesistenti
@@ -54,8 +53,8 @@ n_c_lomb1 <- unique(lomb1$NOME_COMUNE) %>% length()
 n_c_comuni_mf <- unique(comuni_mf$NOME_COMUNE) %>% length()
 if(n_c_lomb1 != n_c_comuni_mf) warning("Numero di comuni in [lomb1] e [comuni_mf] diverso.")
 #2 il numero totale di decessi è lo stesso dei due datasets
-n_d_lomb1 <- lomb1 %>% filter(SESSO == "TOTALE") %>% select(DECESSO) %>% sum()
-n_d_comuni_mf <- comuni_mf %>% filter(SESSO == "TOTALE") %>% select(DECESSO) %>% sum()
+n_d_lomb1 <- lomb1 %>% filter(SESSO == "TOTALE" & !is.na(DECESSO)) %>% select(DECESSO) %>% filter() %>% sum()
+n_d_comuni_mf <- comuni_mf %>% filter(SESSO == "TOTALE" & !is.na(DECESSO)) %>% select(DECESSO) %>% sum()
 if(n_d_lomb1 != n_d_comuni_mf) warning("Numero di decessi totali in [lomb1] e [comuni_mf] diverso.")
 
 #ora si crea il dataset con i decessi e la popolazione giornaliera relativi ai comuni italiani
@@ -91,12 +90,12 @@ n_NA_popolazione <- province_giorno[is.na(province_giorno$POPOLAZIONE) & year(pr
 if(n_NA_popolazione) warning("NA values in pr_tot.")
 
 #ora si ricavano i 3 dataset relativi alla lombardia
-lomb_list <- province_giorno %>% group_by(DATA, SESSO) %>% 
+lomb_list <- province_giorno %>% 
+  group_by(DATA, SESSO) %>% 
   summarise(DECESSI = sum(DECESSI), POPOLAZIONE = sum(POPOLAZIONE)) %>% 
   mutate(DECESSI_P10k = ifelse(is.na(POPOLAZIONE), NA, DECESSI*10000/POPOLAZIONE)) %>% 
   group_by(SESSO) %>% 
   group_split() 
-
 #infine si salvano tutti i dataset ricavati
 write_csv(lomb_list[[1]], "data/lombardia_giorno_femmine.csv")
 write_csv(lomb_list[[2]], "data/lombardia_giorno_maschi.csv")
