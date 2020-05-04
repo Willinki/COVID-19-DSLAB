@@ -1,0 +1,141 @@
+---
+title: "Covid-19"
+author: "Pietro Bonardi"
+date: "2/5/2020"
+output: html_document
+---
+
+```{r}
+if( !require(tidyverse)) install.packages("tidyverse")
+```
+Siamo interssati all'analisi delle morti durante gli anni nella lombardia. 
+
+# Esplorazione del dataset
+```{r}
+db <- read_csv("data/raw/comune_raw.csv", 
+                 locale = locale(encoding = "ISO-8859-1"))
+```
+
+Verifico di aver importato correttamente gli anni.
+```{r}
+unique(db$GE)
+```
+
+Per prima cosa filtro i dati per la regione **Lombardia**:
+ - Quindi rimuovo le colonne che identificavano la regione ed il numero associato.
+```{r}
+db %>% filter(NOME_REGIONE == "Lombardia") -> lomb1
+lomb1 <-select(lomb1,-c("REG","NOME_REGIONE"))
+```
+
+Sistemo le informazioni all'interno del dataset in modo da avere dei valori più comodi per l'analisi.
+```{r}
+lomb1 <- gather(data = lomb1, key = "SESSO_ANNO", value = "DECESSO",MASCHI_15:TOTALE_20) 
+
+# sepazione con anno 
+lomb1 %>% separate(SESSO_ANNO, c("SESSO", "ANNO"), "_") -> lomb1
+
+# Gli anni sono corretti
+lomb1[which(lomb1$GE==229 & lomb1$DECESSO>0), ]
+
+# Seleziono quindi solamente le entry con decesso uguale ad uno per non avere anni non bisesitili 
+lomb1=lomb1[which(lomb1$DECESSO>0), ]
+
+##elimino i dati mancanti
+lomb1 <- lomb1 %>% filter(DECESSO != 9999)
+
+# Aggiungo la data
+lomb1 = lomb1 %>% mutate(DATA = as.Date(paste0(lomb1$GE,lomb1$ANNO), format = "%m%d%y"))
+
+## suddivisione in classi: ANZIANO, ADULTO, GIOVANE
+lomb1 = lomb1 %>% mutate(CL_ETA = ifelse(CL_ETA<=6,"Giovane",
+                                         ifelse(CL_ETA <= 13 & CL_ETA > 6,yes = "Adulto","Anziano")
+                                         )
+                         )
+
+
+
+## eliminio alcune colonne che non verranno utilizzate
+lomb1 <- lomb1 %>% select(DATA, NOME_PROVINCIA, NOME_COMUNE, CL_ETA, SESSO, DECESSO, DATA_INIZIO_DIFF)
+
+##ora gruppo per tutto tranne la classe d'età e sommo i decessi, in modo da condensare l'informazione 
+# circa la classe d'età, che non è disponibile nella popolazione dei comuni
+comuni_mf <- lomb1 %>% select(-CL_ETA) %>% 
+  group_by(DATA, NOME_PROVINCIA, NOME_COMUNE, SESSO, DATA_INIZIO_DIFF) %>% 
+  summarise(DEC = sum(DECESSO)) %>% 
+  as.data.frame() 
+
+#infine filtro i dati mancanti
+comuni_mf %>% head()
+
+```
+# TO DO
+- raggruppare le classi d'eta (poichè mancano nel dataset che contiene il numero di abitanti per un determinato comune).
+  - per farlo utilizza una group by per nome comune %>% DATA %>% SESSO, collapse con somma
+  
+- Integrazione con dataset Popolazione comuni lombardia [left join ]
+  cosi otteniamo informazioni circa: 
+  > il numero di abitanti di quel comune distinti per maschi e femmine e le morti nei diversi anni di maschi e femmine.
+    Con queste informazioni andremo a calcolare il numero di morti per ogni giorno pesandolo con il numero degli abitanti rispettivo.
+
+- Una volta arrivati ad avere quindi il numero di morti procapite, si potrà iniziare a costruire una serie storica (giornaliera) per tutti gli anni.
+  > In pratica avremo a disposzione i morti procapite dal 1 gennaio al 30 aprile (**salvo dati mancanti**). Si è deciso di stimare il numero di morti causati dal
+  nuovo covid-19, con la differenza dei morti tra gli anni 15,...19, di fatto sottraendo il numero di morti non dovuti alla pandemia.
+  
+Ora si effettuano una serie di controlli per vedere che tutto sia avvenuto correttamente
+```{r}
+#tutti i comuni sono presenti prima e dopo l'operazione
+unique(lomb1$NOME_COMUNE) %>% length()
+unique(comuni_mf$NOME_COMUNE) %>% length()
+
+#la somma dei decessi rimane uguale prima e dopo
+lomb1 %>% filter(SESSO == "TOTALE") %>% select(DECESSO) %>% sum()
+comuni_mf %>% filter(SESSO == "TOTALE") %>% select(DEC) %>% sum()
+```
+
+Ora è necessario integrare il dataset dei decessi con il dataset della popolazione giorno per giorno.
+
+Si è deciso di effettuare un operazione di inner join. 
+
+Effettuare un join sul comune risultava piuttosto complicato per una serie di problemi:
+* Alcuni comuni non esistevano all'inizio dell'intervallo temporale considerato
+* Alcuni comuni hanno cambiato struttura nel corso del periodo di tempo considerato
+
+Effettuare il join è un'operazione piuttosto rapida, che però permette di effettuare alcune indagini relative ai comuni principali, per cui i dati sono sempre presenti.
+```{r}
+pop_com <- read_csv("../COVID-TEST/comuni_giornalieri.csv")
+com_inner <- left_join(comuni_mf, pop_com, by = c("NOME_COMUNE", "DATA", "SESSO"))
+```
+
+Ora quindi si raggruppano i dati per provincia e si effettua il join.
+```{r}
+pop_prov <- read_csv("data/raw/popolazione_province_giorno.csv")
+
+pr_tot <- comuni_mf %>% 
+  group_by(NOME_PROVINCIA, DATA, SESSO) %>% 
+  summarise(DECESSI = sum(DEC)) %>% 
+  left_join(y = pop_prov, by = c("NOME_PROVINCIA", "DATA", "SESSO"))
+
+#non ci sono valori nulli a parte i dati per il 2020
+pr_tot[is.na(pr_tot$POPOLAZIONE) & year(pr_tot$DATA) != 2020, ] %>% unique() %>% nrow()
+```
+
+Ora si vuole ricavare il dataset per la lombardia, per maschi, femmine e totale.
+```{r}
+lomb_list <- pr_tot %>% group_by(DATA, SESSO) %>% 
+  summarise(DECESSI = sum(DECESSI), POPOLAZIONE = sum(POPOLAZIONE)) %>% 
+  mutate(DECESSI_P10k = ifelse(is.na(POPOLAZIONE), NA, DECESSI*10000/POPOLAZIONE)) %>% 
+  group_by(SESSO) %>% 
+  group_split() 
+```
+
+Ora si salvano i dataset utili:
+```{r}
+write_csv(lomb_list[[1]], "data/lombardia_giorno_femmine.csv")
+write_csv(lomb_list[[2]], "data/lombardia_giorno_maschi.csv")
+write_csv(lomb_list[[3]], "data/lombardia_giorno_totale.csv")
+write_csv(pr_tot, "data/province_giorno.csv")
+write_csv(com_inner, "data/comuni_principali_giorno.csv")
+```
+
+
