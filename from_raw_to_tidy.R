@@ -4,7 +4,7 @@
 #per aggiungere la colonna "DECESSI_P10k", che indica il numero di 
 #decessi giornalieri ogni 10k abitanti.
 
-#restituisce 5 dataset:
+#restituisce 6 dataset:
 # - Numero di decessi giornalieri per 10k abitanti di sesso femminile in tutta la lombardia 
 #   [lombardia_giorno_femmine.csv]
 # - Numero di decessi giornalieri per 10k abitanti di sesso maschile in tutta la lombardia 
@@ -14,7 +14,9 @@
 # - Numero di decessi giornalieri per 10k abitanti di ogni sesso per le province lombarde
 #   [province_giorno.csv]
 # - Numero di decessi giornalieri per 10k abitanti di ogni sesso per i principali comuni lombardi
-#   [comuni_giorno.csv]
+#   [comuniPrincipali_giorno.csv]
+# - Numero di decessi giornalieri in valore assoluto di ogni sesso per i comuni lombardi
+#   [comuni_decessi_assoluti.csv]
 
 if( !require(tidyverse)) install.packages("tidyverse")
 if( !require(lubridate)) install.packages("lubridate")
@@ -96,9 +98,11 @@ lomb_list <- province_giorno %>%
   mutate(DECESSI_P10k = ifelse(is.na(POPOLAZIONE), NA, DECESSI*10000/POPOLAZIONE)) %>% 
   group_by(SESSO) %>% 
   group_split() 
+
 #infine si salvano tutti i dataset ricavati
-write_csv(lomb_list[[1]], "data/lombardia_giorno_femmine.csv")
-write_csv(lomb_list[[2]], "data/lombardia_giorno_maschi.csv")
+write.csv(lomb_list[[1]], "data/lombardia_giorno_femmine.csv")
+write.csv(lomb_list[[2]], "data/lombardia_giorno_maschi.csv")
 write_csv(lomb_list[[3]], "data/lombardia_giorno_totale.csv")
-write_csv(province_giorno, "data/province_giorno.csv")
-write_csv(comuniPrincipali_giorno, "data/comuniPrincipali_giorno.csv")
+write.csv(province_giorno, "data/province_giorno.csv")
+write.csv(comuniPrincipali_giorno, "data/comuniPrincipali_giorno.csv")
+write.csv(comuni_mf, "data/comuni_decessi_assoluti.csv")

@@ -1,0 +1,128 @@
+---
+title: "Analisi sulla serie storica dei decessi in lombardia"
+output: html_notebook
+---
+
+Prima di tutto importo il file relativo ai decessi in Lombardia e lo trasformo in serie temporale, inoltre importo le librerie necessarie alla gestione.
+
+Visto il dato che stiamo cercando, utilizziamo solamente i dati mensili, prendendo la somma dei decessi suddivisi per mese e dividendo per il numero di giorni, in modo da eliminare i fattori legati al fatto che alcuni mesi sono più lunghi di altri.
+```{r}
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(xts)) install.packages("xts")
+if(!require(lubridate)) install.packages("lubridate")
+if(!require(forecast)) install.packages("forecast")
+if(!require(tseries)) install.packages("tseries")
+db <- read_csv("data/lombardia_giorno_totale.csv")
+db_m <- db %>% 
+  mutate(D_per_month = days_in_month(DATA)) %>% 
+  group_by(MONTH = cut(DATA, "month")) %>% 
+  summarise(DECESSI_Pday = sum(DECESSI/D_per_month))
+
+decessi_m_ts <- as.xts(db_m$DECESSI_Pday, order.by = as.Date(db_m$MONTH))["/2019"]
+```
+Ora tento con un modello auto-arima, prevedendo il numero di decessi al giorno per marzo.
+```{r}
+model1 <- auto.arima(decessi_m_ts)
+points <- forecast(model1, h = 4)
+points %>% autoplot()
+```
+
+Si può vedere che non va affatto bene. Proviamo manualmente.
+
+Per prima cosa si testa la stazionarità della serie così com'è.
+```{r}
+adf.test(decessi_m_ts)
+```
+
+Pare che la serie sia già stazionaria.
+
+Proviamo ad osservare le funzioni di correlazione parziale e di autocorrelazione,
+```{r}
+ggAcf(decessi_m_ts)
+ggPacf(decessi_m_ts)
+```
+Si tenta un modello stagionale con stagionalità pari a 4. Si pone 2 nell'AR.
+```{r}
+model3 <- Arima(decessi_m_ts, c(0,0,0), c(1, 1, 0, 4), lambda = BoxCox.lambda(decessi_m_ts))
+ggAcf(model3$residuals)
+ggPacf(model3$residuals)
+forecast(model3) %>% plot()
+```
+Piuttosto male. Non possiamo avere conclusioni sensate.
+
+Pare che la serie sia già white noise. Per predire il valore della serie proviamo ad usare delle variabili stagionali, corrispondenti al mese.
+```{r}
+months(time(decessi_m_ts)) %>% factor() -> mesi
+mesi_dummy <- dummies::dummy(mesi)
+t <- seq_along(decessi_m_ts)
+model2 <- lm(decessi_m_ts ~ mesi_dummy[, -4] + t)
+summary(model2)
+```
+
+Si osserva che per questo primo modello, la variabile esplicativa t non risulta significativa. Ce lo si aspettava dal fatto che la serie non esibiva un trend evidendente negli anni passati.
+```{r}
+model3 <- lm(decessi_m_ts ~ mesi_dummy[, -4])
+summary(model3)
+```
+
+Si osserva che la capacità del modello di spiegareì i dati aumenta, anche se di poco.
+
+L'intercetta del modello corrisponde al numero di morti giornalieri che il modello interpreta per il mese di marzo, con la relativa deviazione standard.
+
+Si conclude che:
+```{r}
+intercept <- summary(model3)[["coefficients"]][1,1] 
+std <- summary(model3)[["coefficients"]][1,2] 
+M_DEATHS_NOCOVID = intercept*31
+STD_DEATHS_NOCOVID = std*31
+cat("Totale morti previsti per il mese di marzo nel 2020, in assenza di Covid-19: ", 
+    M_DEATHS_NOCOVID, 
+    " +- ", 
+    STD_DEATHS_NOCOVID
+    )
+```
+
+# Ora si calcolano i morti per covid.
+Per prima cosa si legge il dataset con i dati delle morti nei comuni lombardi a marzo.
+
+Si sommano i valori e si ottiene un range.
+```{r}
+decessi_covid_comuni <- read_csv("data/comuni_decessi_marzo.csv")
+DEATHS_COVID_C_max <- sum(decessi_covid_comuni$DECESSI_HIGH)
+DEATHS_COVID_C_min <- sum(decessi_covid_comuni$DECESSI_LOW)
+```
+
+Si calcola ora in numero di morti IN PIÙ che ci sono state quest'anno rispetto all'anno scorso.
+
+Il range di valori è calcolato come segue:
+```{r}
+DEATHS_PLUS_2020_max <- (DEATHS_COVID_C_max - (M_DEATHS_NOCOVID - STD_DEATHS_NOCOVID)) %>% as.integer()
+DEATHS_PLUS_2020_min <- (DEATHS_COVID_C_min - (M_DEATHS_NOCOVID + STD_DEATHS_NOCOVID)) %>% as.integer()
+```
+
+Ora il confronto con i dati della protezione civile.
+Si scaricano i due dataset relativi al primo marzo e al 31 marzo.
+```{r}
+data_0301 <- read_csv("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-20200301.csv")
+data_0331 <- read_csv("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-20200331.csv")
+deaths_0331 <- data_0331 %>% filter(denominazione_regione == "Lombardia") %>% select(deceduti)  
+deaths_0301 <- data_0301 %>% filter(denominazione_regione == "Lombardia") %>% select(deceduti)  
+
+DEATHS_PR <- as.numeric(deaths_0331 - deaths_0301) 
+```
+
+Ora plottiamo la situazione:
+```{r}
+mean_death_plus <- (DEATHS_PLUS_2020_max + DEATHS_PLUS_2020_min)/2
+sd_death_plus <- (DEATHS_PLUS_2020_max - DEATHS_PLUS_2020_min)/2
+data <- data.frame(
+  name = c("Aumento di decessi in Lombardia nel marzo 2020", "Decessi per COVID-19"),
+  value = c(mean_death_plus, DEATHS_PR),
+  sd = c(sd_death_plus, 0)
+)
+
+ggplot(data) +
+    geom_bar( aes(x=name, y=value), stat="identity", fill="skyblue", alpha=0.7) +
+    geom_errorbar( aes(x=name, ymin=value-sd, ymax=value+sd), width=0.4, colour="orange", alpha=0.9, size=1.3)
+```
+
