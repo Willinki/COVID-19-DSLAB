@@ -126,3 +126,21 @@ ggplot(data) +
     geom_errorbar( aes(x=name, ymin=value-sd, ymax=value+sd), width=0.4, colour="orange", alpha=0.9, size=1.3)
 ```
 
+
+```{r}
+italycoordinates <- read_csv("../../italy cordinates/italy_geo.csv")
+names(italycoordinates)[names(italycoordinates) == "comune"] <- "NOME_COMUNE"
+italycoordinates
+length(unique(italycoordinates$comune))
+
+marzo_2020 <- read.csv("data/comuni_decessi_marzo.csv")
+xNew = merge (marzo_2020,italycoordinates, by = "NOME_COMUNE")
+
+xNew <- transform(xNew,longitudine = as.numeric(lng), 
+                    latitudine = as.numeric(lat))
+
+xNew<- xNew[,-c(6:8)]
+write.csv(xNew,"../../italy cordinates/xNew.csv")
+
+```
+

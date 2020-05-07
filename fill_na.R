@@ -12,7 +12,7 @@ if(!require(xts)) install.packages("xts")
 if(!require(forecast)) install.packages("forecast")
 
 #si carica il dataset con i decessi giornalieri nei comuni lombardi.
-df_raw <- read_csv("data/comuni_decessi_assoluti.csv")
+df_raw <- read_csv("comuni_decessi_assoluti.csv")
 
 #si rimuove il mese di aprile
 df_raw <- df_raw %>% filter(DATA < as.Date("2020-04-04"))
@@ -25,7 +25,7 @@ n_com_NA <- df_raw %>%
 n_com_TOT <- df_raw %>% 
   select(NOME_COMUNE) %>%
   unique() %>% nrow()
-cat("Comuni per non si dispone dei decessi a Marzo: ", n_com_NA, 
+cat("Comuni per cui non si dispone dei decessi a Marzo: ", n_com_NA, 
     "\nSu un totale di: ", n_com_TOT)
 
 # ora, per tutti questi comuni si sa che il numero di decessi:
@@ -47,7 +47,7 @@ cat("Comuni per non si dispone dei decessi a Marzo: ", n_com_NA,
 dec_m20 <- df_raw %>% filter(DATA >= as.Date("2020-03-01") & DATA <= as.Date("2020-04-01")) %>%
   group_by(NOME_PROVINCIA, NOME_COMUNE) %>% 
   summarise(DECESSI_HIGH = sum(DECESSO), DECESSI_LOW = sum(DECESSO))
-
+dec_m20["AVG"] <- 0
 #si nota che il numero di righe del dataset diminuisce, passando da 1505 comuni a 1484
 #questo perchè, come si osserva, nel dataset originario alcuni comuni come ad esempio 
 #"Battuda" sono presenti solo per pochi giorni dell'anno
@@ -56,26 +56,7 @@ dec_m20 <- df_raw %>% filter(DATA >= as.Date("2020-03-01") & DATA <= as.Date("20
 
 #STEP 2
 #Riempimento dei valori nulli
-estimate_high <- function(name, df_tot){
-  decessi <- integer(5)
-  decessi[1] <- df_raw %>% 
-    filter(DATA > as.Date("2015-03-01") & DATA < as.Date("2015-04-04")) %>% 
-    filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
-  decessi[2] <- df_raw %>% 
-    filter(DATA > as.Date("2016-03-01") & DATA < as.Date("2016-04-04")) %>% 
-    filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
-  decessi[3] <- df_raw %>% 
-    filter(DATA > as.Date("2017-03-01") & DATA < as.Date("2017-04-04")) %>% 
-    filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
-  decessi[4] <- df_raw %>% 
-    filter(DATA > as.Date("2018-03-01") & DATA < as.Date("2018-04-04")) %>% 
-    filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
-  decessi[5] <- df_raw %>% 
-    filter(DATA > as.Date("2019-03-01") & DATA < as.Date("2019-04-04")) %>% 
-    filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
-  as.integer(mean(decessi)* 31/35 *1.20 + 0.5) %>% return()
-}
-estimate_low <- function(name, df_tot){
+estimateHighLow <- function(name, df_tot){
   decessi <- integer(5)
   decessi[1] <- df_raw %>% 
     filter(DATA > as.Date("2015-03-01") & DATA < as.Date("2015-04-04")) %>% 
@@ -93,23 +74,56 @@ estimate_low <- function(name, df_tot){
     filter(DATA > as.Date("2019-03-01") & DATA < as.Date("2019-04-04")) %>% 
     filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
   
+  high_w<- as.integer(mean(decessi)* 31/35 *1.20 + 0.5) 
   low_w <- mean(decessi)*31/35 - 2*sd(decessi) + 0.5 
-  ifelse(as.integer(low_w) > 0, 
-         as.integer(low_w), 
-         0) %>% return()
+  low_w <-ifelse(as.integer(low_w) > 0, as.integer(low_w),0)
+  
+  prev=list("H"=high_w,"L"=low_w)
+  return(prev)
 }
+
+# estimate_low <- function(name, df_tot){
+#   decessi <- integer(5)
+#   decessi[1] <- df_raw %>% 
+#     filter(DATA > as.Date("2015-03-01") & DATA < as.Date("2015-04-04")) %>% 
+#     filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
+#   decessi[2] <- df_raw %>% 
+#     filter(DATA > as.Date("2016-03-01") & DATA < as.Date("2016-04-04")) %>% 
+#     filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
+#   decessi[3] <- df_raw %>% 
+#     filter(DATA > as.Date("2017-03-01") & DATA < as.Date("2017-04-04")) %>% 
+#     filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
+#   decessi[4] <- df_raw %>% 
+#     filter(DATA > as.Date("2018-03-01") & DATA < as.Date("2018-04-04")) %>% 
+#     filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
+#   decessi[5] <- df_raw %>% 
+#     filter(DATA > as.Date("2019-03-01") & DATA < as.Date("2019-04-04")) %>% 
+#     filter(NOME_COMUNE == name) %>% select(DECESSO) %>% sum()
+#   
+#    %>% return()
+# }
+
+##############################################################################
+
+
+
+##############################################################################
+
+
 
 pd <- txtProgressBar(min = 1, max = nrow(dec_m20), style = 3)
 for(i in 1:nrow(dec_m20)){
   setTxtProgressBar(pd, i)
   if(is.na(dec_m20[i, "DECESSI_HIGH"])){
-    dec_m20[i, "DECESSI_HIGH"] = estimate_high(dec_m20[i, "NOME_COMUNE"] %>% as.character(), df_raw)
-    dec_m20[i, "DECESSI_LOW"] = estimate_low(dec_m20[i, "NOME_COMUNE"] %>% as.character(), df_raw)
+    parameters=estimateHighLow(dec_m20[i, "NOME_COMUNE"] %>% as.character(), df_raw)
+    dec_m20[i, "DECESSI_HIGH"]=parameters["H"]
+    dec_m20[i, "DECESSI_LOW"] = parameters["L"]
   }
+  dec_m20$AVG[i]=mean(dec_m20$DECESSI_HIGH[i], dec_m20$DECESSI_LOW[i])
 }
+
 close(pd)
 #STEP 3 - Scrittura del dataframe
-write_csv(dec_m20, "data/comuni_decessi_marzo.csv")
-
-
+view(dec_m20)
+write_csv(dec_m20, "comuni_decessi_marzo.csv")
 
