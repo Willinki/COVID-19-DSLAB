@@ -1,0 +1,87 @@
+---
+title: "Statistical analysis of Covid-19 deaths"
+author: "Davide Badalotti, Pietro Bonardi"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+```{r, out.width = "600px", hide = T, echo = F}
+#knitr::include_graphics("report/1200px-Flag_of_Lombardy_square.svg.png")
+knitr::include_graphics("presBicocca.png")###includere immagine della bicocca
+```
+ 
+# Introduction
+
+Covid-19, as all we know, has caused lots of deaths in Italy. During the last months we get news from many websites such as [Ministero della Salute](http://www.salute.gov.it/portale/nuovocoronavirus/dettaglioContenutiNuovoCoronavirus.jsp?area=nuovoCoronavirus&id=5351&lingua=italiano&menu=vuoto), [Il Sole 24 Ore](https://lab24.ilsole24ore.com/coronavirus/),  and so on, which reports information about this critical situation.
+In this project we analyise Lombardy, since it's the most affected region, and the aim is to estimate the **real number of deaths** and then compare it to the one given by the report. 
+
+To do so, we have to proceed **stepwise**.
+
+```{r figurename, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("workflow.png")
+```
+
+
+### Data Source 
+The dataset used is provided by [ISTAT](https://www.istat.it/it/archivio/240401). It basically show the number of deaths referring to a given date, between 1/01-30/04, and to a given italian's municipalities, among years 2015 and 2020. By the way the complete dataset structure is shown after. 
+
+### Data Selection
+In order to consider the **most emergency situations** ISTAT focuses its attention only on municipalities that have:
+
+- At least 10 deaths during 4/01/2020 - 4/04/2020.
+- Recorded an increase in deaths of at least 20% or more in the period $1^{st}$ March - $4^{th}$ April 2020, compared to the average data for the same period of the past years 2015-2019
+
+
+### Dataset Structure
+The dataset is composed by 27 attribute, in more detail:
+
+* REG: Istat code of the region of residence  
+* PROV: Istat code of the province of residence
+* NOME_REGIONE: the name of the region
+* NOME_PROVINCIA: the name of the province
+* NOME_COMUNE: the name of the municipality
+* DATA_INIZIO_DIFF: Start date of data diffusion for 2020 
+* COD_PROVCOM:City of residence
+* CL_ETA: Age groups
+* GE: Day of death
+  For all years from 2015 to 2020 there is a colomn, here summarise as [15-20]
+* MASCHI_[15-20]: the total number of men deaths in [2015-2020]
+* FEMMINE_[15-20]: the total number of females deaths in [2015-2020]
+* TOTALE_[15-20]: the total number of deaths within gender distiction
+
+
+ 
+# Data cleaning
+### Used Libraries 
+* `tidyverse`, the reson why we use this package is due to the fact that some municipalities's sintax contains accents.
+```{r, include=FALSE}
+if( !require(tidyverse)) install.packages("tidyverse")
+```
+
+As mention before, we want to analize covid-19 impact on Lombardy, so from the initial dataset: 
+
+* we filter by `NOME_REGIONE==Lombardia`
+```{r ,hide=T,echo=F}
+# si importa il dataset con i decessi suddivisi per comune
+db <- read_csv("data/raw/comune_raw.csv", 
+                 locale = locale(encoding = "ISO-8859-1"))
+
+#vengono mantenuti solo i dati relativi alla lombardia
+#vengono rimosse le colonne col nome della regione
+lomb1 <- db %>%  filter(NOME_REGIONE == "Lombardia") 
+lomb1 <- select(lomb1, -c("REG","NOME_REGIONE"))
+```
+
+
+ 
+# Forecasts
+ 
+ 
+# Final results
+
