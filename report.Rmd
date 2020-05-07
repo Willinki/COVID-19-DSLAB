@@ -1,0 +1,28 @@
+---
+title: "Statistical analysis of Covid-19 deaths"
+author: "Davide Badalotti, Pietro Bonardi"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+```{r, out.width = "200px", hide = T, echo = F}
+knitr::include_graphics("report/1200px-Flag_of_Lombardy_square.svg.png")
+###includere immagine della bicocca
+```
+ 
+# Introduction
+ 
+ 
+# Data cleaning
+ 
+ 
+# Forecasts
+ 
+ 
+# Final results
