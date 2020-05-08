@@ -11,17 +11,6 @@ vignette: >
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
-<<<<<<< HEAD
-```{r, out.width = "200px", hide = T, echo = F}
-knitr::include_graphics("report/1200px-Flag_of_Lombardy_square.svg.png")
-###includere immagine della bicocca
-```
- 
-# Introduction
- 
- 
-# Data cleaning
-=======
 ```{r, out.width = "600px", hide = T, echo = F}
 #knitr::include_graphics("report/1200px-Flag_of_Lombardy_square.svg.png")
 knitr::include_graphics("presBicocca.png")###includere immagine della bicocca
@@ -31,22 +20,29 @@ knitr::include_graphics("presBicocca.png")###includere immagine della bicocca
 
 Covid-19, as all we know, has caused lots of deaths in Italy. During the last months we get news from many websites such as [Ministero della Salute](http://www.salute.gov.it/portale/nuovocoronavirus/dettaglioContenutiNuovoCoronavirus.jsp?area=nuovoCoronavirus&id=5351&lingua=italiano&menu=vuoto), [Il Sole 24 Ore](https://lab24.ilsole24ore.com/coronavirus/),  and so on, which reports information about this critical situation.
 In this project we analyise Lombardy, since it's the most affected region, and the aim is to estimate the **real number of deaths** and then compare it to the one given by the report. 
-To do so, we have to proceed **stepwise** and first of all by exploring the dataset. 
+The results of this analysis and the script used can be found in this [Github repository](https://github.com/Willinki/COVID-19-DSLAB). So, in order to fully read the contents of the scripts, we suggest to refer to this link.
+In this final report, we will illustrate the logic behind the scripts, their overall aim, and the results obtained.
+Another important aspect of this research is that it can expanded in numerous ways. Since we decided to continue to work on this data, the illustrated procedure contains some steps that are not useful for the final results, but will be exploited in future researches.
+First, we start by exploring the data.
 
 ### Data Source 
-The dataset used is provided by [ISTAT](https://www.istat.it/it/archivio/240401). It basically show the number of deaths referring to a given date, between 1/01-30/04, and to a given italian's municipalities, among years 2015 and 2020. By the way the complete dataset structure is shown after. 
+
+The dataset used is provided by [ISTAT](https://www.istat.it/it/archivio/240401). It basically show the number of deaths referring to a given date, between 1/01-30/04, and to a given italian municipality among the years 2015 and 2020. The complete dataset structure is shown after. 
 
 ### Data Selection
+
 In order to consider the **most emergency situations** ISTAT focuses its attention only on municipalities that have:
 
 - At least 10 deaths during 4/01/2020 - 4/04/2020.
 - Recorded an increase in deaths of at least 20% or more in the period $1^{st}$ March - $4^{th}$ April 2020, compared to the average data for the same period of the past years 2015-2019
 
-Another things important to underline is that in 2020 there are missing marked as 9999, this indicated that there is no informatios about the number of deaths in that day. 
-
+Another things important to underline is that in 2020 there are missing values marked as 9999, this indicated that there is no information about the number of deaths in that day. 
+In order to analyze this data more effectively, we decided to integrate it with another dataset, containing the population of each municipality from 2015 to the end of 2019, with monthly frequency.
+The data coming from this data hasn't been used in this particular analysis, but could be used in the future, since it provides useful information about the ratio of number of deaths and population in each municipality. Since it is not been used, we will only briefly explain how we treated this data.
 
 ### Dataset Structure
-The dataset is composed by 27 attribute, in more detail:
+
+The first dataset, that can be found in `data/raw/comune_raw.csv` is composed by 27 attributes, in more detail:
 
 * **REG**: Istat code of the region of residence  
 * **PROV**: Istat code of the province of residence
@@ -56,89 +52,225 @@ The dataset is composed by 27 attribute, in more detail:
 * **DATA_INIZIO_DIFF**: Start date of data diffusion for 2020 
 * **COD_PROVCOM**:City of residence
 * **CL_ETA**: Age groups
-* **GE**: Day of death
+* **GE**: Day and month of death
   For all years from 2015 to 2020 there is a colomn, here summarise as [15-20]
 * **MASCHI_[15-20]**: the total number of men deaths in [2015-2020]
 * **FEMMINE_[15-20]**: the total number of females deaths in [2015-2020]
 * **TOTALE_[15-20]**: the total number of deaths within gender distiction
 
+The second dataset, that can be found in `data/raw/popolazione_raw.csv` is composed of 11 attributes, and it contains the population of each municipality inside lombardi, from 2015-01 to 2019-12, at the start of the month, for males and females.
+It also contains the same data for the 12 provinces.
+
 ### Workflow
+
 The basic idea behind the estimation is: 
 
-1. We start from our initial dataset and we want to understand the number of death from 2015 to 2020. (Cleaning and Analysis)
-2. We do the same .. ``da qui ripartire``
-
-```{r figurename, echo=FALSE, out.width = '50%'}
+1. We retrieve the data from the first dataset illustrated above. Since its format does not allow us to analyze it effectively, we change the structure and content of the columns.
+2. We integrate it with the second dataset, also properly treated.
+3. We use this information to estimate the number of deaths occurred in Lombardy, from 2020-03-01 to 2020-04-01.
+4. Then, by analyzing the data referring to the the time interval from 2015 to 2019, we estimate the number of deaths that would have occurred in Lombardy without the impact of Coronavirus.
+5. We then subtract these two values to obtain the increase in deaths for 2020.
+6. We compare this value with the number of Covid-19 related deaths, retrieved from the official datasets from _Protezione Civile Italiana_.
+```{r figurename, echo=FALSE, out.width = '100%'}
 knitr::include_graphics("workflow.png")
 ```
 
+---
 
-**Comments**
+# Data cleaning
 
+The aim of this part is to obtain one integrated dataset, containing the number of deaths occured each day in Lombardy for the first 4 months of the years 2015 to 2020.
+Furthermore, this dataset will contain our estimates for the population of Lombardy, for each day, for the first four months of the years 2015 to 2019.
+This dataset will be used to conduct our analysis.
+To clean the data, we made large use of the `tidyverse` library, that allowed us to maintain our code relatively efficient without losing expressivity.
+The first step of data cleaning is contained in the script `from_month_to_daily.R`.
+
+### from_month_to_daily.R
+
+The script treats the population dataset. As we mentioned before, this is not useful for the analysis illustrated in this report.
+For this reason, we won't explain in detail the contents of this script.
+In brief, the scripts takes the data in `data/raw/popolazione.raw`, which has monthly frequency, and performs a linear interpolation of the population values.
+It then splits municipalities and provinces data, thus returning two different datasets:
+
+* `data/raw/popolazione_comuni_giorno.csv` : containing the population of each municipality, for the same interval of time but with __daily__ frequency.
+* `data/raw/popolazione_province_giorno.csv` : containing the population of each province, for the same interval of time but with __daily__ frequency.
+
+These two dataset are then used inside the next script.
+
+### from_raw_to_tidy.R
+
+The aim of this dataset is clean, restructure and integrate the data contained in `data/raw/comune_raw.csv`.
+In particular, starting from the population and deaths dataset, this script returns 6 differents dataset, with the first five having the same structure:
+
+* `lombardia_giorno_femmine.csv`
+* `lombardia_giorno_maschi.csv`
+* `lombardia_giorno_totale.csv`
+* `province_giorno.csv`
+* `comuniPrincipali_giorno.csv`
+ 
+These dataset report, for each day, the number of deaths, the population, and the quantity _number of deaths for 10000 people_ respectively for: the female population of lombardy, the male population of lombardy, the total population of lombardy, each province, the main municipalities (details below).
+
+We illustrate this script by dividing it in steps:
+
+* First we filter the data coming from `comune_raw.csv`, maintaining only the rows referring to municipalities in Lombardy.
+* We restructure this data, with this simple operations:
+  - We perform a gather and separate to transform the column from `MASCHI_15` to `TOTALE_20` to `SESSO`, `ANNO`, `DECESSO`. Now we have, for each row, the number of female, male, or total deaths for a certain municipality, in a specific day, from 2015 to 2020, referring to a specific age group.
+  - We substitute the values 9999 in the `DECESSO` column with `NA`.
+  - We create a new column called `DATA`, formatted as a date, taking the information from the `GE` column and the `ANNO` column
+  - We remove the `NA` in this column, referring to non existent dates, like $29^{th}$ of february of non-bisestile years.
+  - We aggregate the data regarding the different age groups, summing the deaths for the different age groups for each day, municipality and gender.
+* The resulting dataset is saved as `comuni_decessi_assoluti.csv`.
+* Then, by joining this data with the data regarding the population of each municipality, we obtain the dataset `comuniPrincipali_giorno.csv`, whose structure has been explained above. It is important to understand that this dataset does not contain information about all the italian municipalities, but only the main ones. Since we performed an inner join of the population and deaths datasets. 
+  This kind of jon operation does not successfully match all the municipalities in the datasets, since some are written differently, or have changed name during the interval of time considered, also, other municipalities have been merged together or split during the same interval of time.
+  However, with this join we are able to analyze the situation of the main municipalities, like __Bergamo__ or __Milan__. A proper join of these two table would require a long and relatively sophisticated operation of record linkage. That we plan to accomplish in the near future.
+* Now, in order to obtain complete and reliable data, and to avoid problems related to the mutable names of italian municipalities, we aggregate the deaths data on provinces, and we join this table wih `popolazione_province_giorno.csv`. Thus obtaining the `province_giorno.csv` dataset. With this operation, we are able to integrate the data efficiently.
+* By further aggregating the provinces data to the whole region and then splitting by gender, we then obtain the 3 dataset regarding lombardy.
+
+Now that we have the data in a tidy and integrated form, we need to address the problem of missing values.
+This is done inside the `fill_NA.R` script.
+
+### fill_NA.R
+According to the data source, not all the municipalities have realeased the data of the regarding the number of deaths for the month of march 2020.
+As we can see in the script, only around half of them have provided complete data for the whole month. 
+For all the other municipalities, we have to estimate the number of deaths.
+In the dataset description, we can read that those municipalities who haven't released the data have one these two requirements:
+
+- Have had less than 10 deaths during 4/01/2020 - 4/04/2020.
+- Have recorded an increase in deaths of less than 20% in the period $1^{st}$ March - $4^{th}$ April 2020, compared to the average data for the same period of the past years 2015-2019
+
+Starting from this assumptions, we can provide a range of estimated deaths for the month of march, then filling the missing value. 
+We decided to use these two values:
+
+- For the higher estimate of deaths, we used this value:
+  $$E_h = 1.20 \times \overline{d} \times \frac{31}{35}$$
+  Where $\overline{d}$ is the mean number of total deaths occurred in the time interval [03-01, 04-04] of each year from 2015 to 2019. The number is opportunately rescaled, since the just cited time interval contains 35 days, while the month of march contains only 31.
+  
+- For the lower estimate, we used:
+  $$E_l = \frac{31}{35} \, \overline{d}   - 2\, \sigma_d$$  
+  Where $\sigma_d$ is the standard error associated to $\overline{d}$.
+
+According to this logic, the script returns a dataset, called `data/comuni_decessi_marzo.csv` with this structure:
+
+- **NOME_PROVINCIA**: name of the province containing the municipality
+- **NOME_COMUNE**: municipality name
+- **DECESSI_LOW**: lower estimate of the number of total deaths in March 2020 for the municipality. 
+- **DECESSI_HIGH**: upper estimate of the number of total deaths in March 2020 for the municipality. 
+
+It is important to point out that, for the municipalities whose data was available, the value of **DECESSI_HIGH** and **DECESSI_LOW** are the same.
+The results will be than used in the Final results section.
+
+### An important note
+We can see that not all 1505 municipalities are contained in the last dataframe, that has a total of 1484 rows.
+This, while it may first seem as an error, does not actually affect the final results.
+We can see, for example, the example of the municipality of `Battuda`. 
+We see that, in the `comune_raw.csv` dataset, this municipality is present only in 5 rows.
+```{r, echo = F}
+library(tidyverse)
+cm_f <- read_csv("data/raw/comune_raw.csv")
+cm_f %>% filter(NOME_COMUNE == "Battuda")
+```
+As we can see, there is no information about the number of deaths in any other day, between 2015 and 2020.
+Looking online, we can see that this municipality has only 655 inhabitants.
+Since the data is missing, we assume that the number of deaths in the month of march of the years 2015 to 2019 must be zero.
+Thus, the absence of these municipalities does not influence our estimates.
 
 ---
- 
-# Data cleaning
-The aim in this part is to have........ 
 
-### Used Libraries 
-* `tidyverse`, the reson why we use this package is due to the fact that some municipalities's sintax contains accents.
-```{r, include=FALSE}
-if( !require(tidyverse)) install.packages("tidyverse")
-```
-
-As mention before, we want to analize covid-19 impact on Lombardy, so from the initial dataset we filter by `NOME_REGIONE==Lombardia`
-```{r ,hide=T,echo=F}
-# si importa il dataset con i decessi suddivisi per comune
-db <- read_csv("data/raw/comune_raw.csv", 
-                 locale = locale(encoding = "ISO-8859-1"))
-
-#vengono mantenuti solo i dati relativi alla lombardia
-#vengono rimosse le colonne col nome della regione
-lomb1 <- db %>%  filter(NOME_REGIONE == "Lombardia") 
-lomb1 <- select(lomb1, -c("REG","NOME_REGIONE"))
-```
-
-
-In order to make it easy to use for our statistical analysis, we create a new dataset with this attributes:
-
-* **DATA**, type `date`, it is formatted as years, day and month
-* **NOME_PROVINCIA**, type `char`, the provice's names
-* **NOME_COMUNE**, type `char`, the monucipality's names
-* **SESSO**, type `char`, that can be "MASCHI" or "FEMMINE"
-* **DATA_INIZIO_DIFF**, type `char`, Start date of data diffusion for 2020.
-* **DECESSO**, type `double`,the number of deaths for a particular date.
-
-```{r}
-lomb1 <- lomb1 %>% gather(key = "SESSO_ANNO", value = "DECESSO",MASCHI_15:TOTALE_20)
-#2 si divide la colonna "SESSO_ANNO"
-lomb1 <- lomb1 %>% separate(SESSO_ANNO, c("SESSO", "ANNO"), "_") 
-#4 si eliminano i dati mancanti
-lomb1 <- lomb1 %>% mutate(DECESSO = ifelse(DECESSO == 9999, NA, DECESSO))
-#5 si formatta la data
-lomb1 <- lomb1 %>% mutate(DATA = as.Date(paste0(lomb1$GE,lomb1$ANNO), format = "%m%d%y"))
-#5.1 si escludono le date inesistenti
-lomb1 <- lomb1 %>% filter(!is.na(DATA))
-#6 si rimuove la colonna relativa alla classe d'età e si sommano i decessi
-comuni_mf <- lomb1 %>% select(-CL_ETA) %>% 
-  group_by(DATA, NOME_PROVINCIA, NOME_COMUNE, SESSO, DATA_INIZIO_DIFF) %>% 
-  summarise(DECESSO = sum(DECESSO)) %>% 
-  as.data.frame() 
-```
- -- 
->>>>>>> 57ef454c6284fd8fe6ade4dc1144aff7a7819dee
- 
- 
 # Forecasts
- 
- 
-# Final results
-<<<<<<< HEAD
-=======
 
+By analyzing the data referring to the the time interval from 2015 to 2019, we now estimate the number of deaths that would have occurred in Lombardy without the impact of Coronavirus.
+The procedure, with all the different approaches tried, is contained in the `final_notebook.Rmd`, but the final procedure is here reproducted.
+Basically, starting from the `lombardia_giorno_totale.csv`, we aggregate the data by month, obtaining the total number of deaths in Lombardy for each month.
+Then, we divide these values for the number of days inside each month, thus obtaining the __mean number of deaths per day in each month__, for the years 2015 to 2019.
+To forecast the values for 2020, we first try out some ARIMA model, since none of them could actually give reliable result, we decide to try out a linear model with seasonal dummy variable for each month.
+The value for the intercept of the model, togheter with $2 \times DevStd$, are used as estimate for the number of deaths per day, for the month of march 2020.
+To obtain these values, we made use of these libraries:
+
+* `xts`
+* `lubridate` 
+* `forecast`
+* `tseries`
+
+We obtain:
+```{r, hide = T}
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(xts)) install.packages("xts")
+if(!require(lubridate)) install.packages("lubridate")
+if(!require(forecast)) install.packages("forecast")
+if(!require(tseries)) install.packages("tseries")
+db <- read_csv("data/lombardia_giorno_totale.csv")
+db_m <- db %>% 
+  mutate(D_per_month = days_in_month(DATA)) %>% 
+  group_by(MONTH = cut(DATA, "month")) %>% 
+  summarise(DECESSI_Pday = sum(DECESSI/D_per_month))
+
+decessi_m_ts <- as.xts(db_m$DECESSI_Pday, order.by = as.Date(db_m$MONTH))["/2019"]
+```
+```{r, echo = F, warning = F}
+months(time(decessi_m_ts)) %>% factor() -> mesi
+mesi_dummy <- dummies::dummy(mesi)
+t <- seq_along(decessi_m_ts)
+model2 <- lm(decessi_m_ts ~ mesi_dummy[, -4] + t)
+
+intercept <- summary(model3)[["coefficients"]][1,1] %>% as.integer()
+std <- 2*summary(model3)[["coefficients"]][1,2] %>% as.integer()
+M_DEATHS_NOCOVID = intercept*31
+STD_DEATHS_NOCOVID = std*31
+cat("Totale morti previsti per il mese di marzo nel 2020, in assenza di Covid-19: ", 
+    M_DEATHS_NOCOVID, 
+    " +- ", 
+    STD_DEATHS_NOCOVID
+    )
+```
+
+We will refer to this values respectively as: $d_f$ and $\sigma_{df}$.
+
+---
+
+# Final results
+
+Now, we join the data coming from the data cleaning section, the forecast section, and the [Protezione Civile Italiana official Github Repository]("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master"), in order to obtain the final results.
+First, we retrieve the data from `data/comuni_decessi_marzo.csv`, we then sum all the values from `DECESSI_HIGH` and all the values from `DECESSI_LOW`, and we obtain the estimates for __the total number of deaths in Lombardy during the month of march 2020__. We refer to these values as $d^+$ and $d^-$, which correspond to a pessimistic and optimistic estimate of the real number of deaths.
+Then, we subtract this value from the estimate of the number of deaths in Lombardy, forecasted from the years 2015 to 2019. Thus obtaining the estimates for the increase of the number of deaths in Lombardy this year. The logic behind this estimate is the following:
+
+- The upper estimate is equal to:
+  $$D^+ = d^+ - (d_f - \sigma_{df})$$
+- The lower estimate is equal to:
+  $$D^- = d^- - (d_f + \sigma_{df})$$
+We then compare the value obtained with the number of Covid-19 related deaths according to __Protezione Civile Italiana__.
+```{r, echo = F, message = F, warning = F}
+decessi_covid_comuni <- read_csv("data/comuni_decessi_marzo.csv")
+DEATHS_COVID_C_max <- sum(decessi_covid_comuni$DECESSI_HIGH)
+DEATHS_COVID_C_min <- sum(decessi_covid_comuni$DECESSI_LOW)
+DEATHS_PLUS_2020_max <- (DEATHS_COVID_C_max - (M_DEATHS_NOCOVID - STD_DEATHS_NOCOVID)) %>% as.integer()
+DEATHS_PLUS_2020_min <- (DEATHS_COVID_C_min - (M_DEATHS_NOCOVID + STD_DEATHS_NOCOVID)) %>% as.integer()
+data_0301 <- read_csv("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-20200301.csv")
+data_0331 <- read_csv("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-20200331.csv")
+deaths_0331 <- data_0331 %>% filter(denominazione_regione == "Lombardia") %>% select(deceduti)  
+deaths_0301 <- data_0301 %>% filter(denominazione_regione == "Lombardia") %>% select(deceduti)  
+DEATHS_PR <- as.numeric(deaths_0331 - deaths_0301) 
+mean_death_plus <- (DEATHS_PLUS_2020_max + DEATHS_PLUS_2020_min)/2
+sd_death_plus <- (DEATHS_PLUS_2020_max - DEATHS_PLUS_2020_min)/2
+data <- data.frame(
+  name = c("Increase in deaths in Lombardy\n during March 2020", "COVID-19 related deaths \n (Protezione Civile Italiana)"),
+  value = c(mean_death_plus, DEATHS_PR),
+  sd = c(sd_death_plus, 0)
+)
+
+ggplot(data) +
+    geom_bar( aes(x=name, y=value), stat="identity", fill = c("#056E4C", "#46BE9E"), alpha=0.9, width = 0.7) +
+    geom_errorbar( aes(x=name, ymin=value-sd, ymax=value+sd), width=0.4, colour="orange", alpha=0.9, size=1.3) + 
+    coord_flip() + 
+    theme(panel.background = element_rect(fill = '#F0F0F0'), 
+          plot.background = element_rect(fill = "#F0F0F0"), 
+          panel.grid.major = element_line(color = "#e0e0e0"), 
+          panel.grid.minor = element_line(color = "#e0e0e0")) +  
+    xlab("") + 
+    ylab("Value")
+```
 
 ### Tableau
-After recovering the Italy geospatial data, we integrate them with the dataset about the deaths in March 2020 in Lombardy municipalities.
+After recovering the Italy geospatial data, we integrate them with the dataset about the deaths during March 2020 in Lombardy municipalities. 
 ```{r}
 italycoordinates <- read_csv("italy cordinates/italy_geo.csv")
 names(italycoordinates)[names(italycoordinates) == "comune"] <- "NOME_COMUNE"
@@ -149,11 +281,25 @@ xNew <- transform(xNew,longitudine = as.numeric(lng),
                     latitudine = as.numeric(lat))
 xNew<- xNew[,-c(6:8)]
 ```
-
-
-
 So now we can see in another way how catastrophic was the covid-19 during march 2020.
+<iframe src="https://public.tableau.com/views/Decessimesemarzo2020Covid-19/Sheet1?:showVizHome=no&:embed=true"width="900" height="900"></iframe>
 
-<iframe src="https://public.tableau.com/views/Decessimesemarzo2020Covid-19/Sheet1?:showVizHome=no&:embed=true"
- width="900" height="900"></iframe>
->>>>>>> 57ef454c6284fd8fe6ade4dc1144aff7a7819dee
+---
+
+# Conclusion and Future developments
+
+Looking at the results from the previos boxplot we can state that:
+ 
+* $D^+= 34131$
+* $D^-= 29240$
+* $Report = 7175$
+
+So calculating the ratios: $\eta_{_D{^+}} = \frac{34131}{7175} = 4,75 $ and $\eta_{_D{^-}} = \frac{29240}{7175} = 4$, we can *conclude* that the estimate number of deaths due to Covid-19 compared to the one given by the report is $[4,4.75]$ times larger.  
+In these project we focus lots of our work in *dataset cleaning*. Infact we produced different type of dataset that potentially could solve this problem in many ways. By the way one of the main dataset cleaning reason is due to the fact that we want to carry on our statistical analysis. 
+In general, we would like to account for the impact of the lockdown on our estimates. For example, the number of car accident related deaths could be much lower then in previous years. Also, the fact that Emergency rooms in hospitals were overcrowded could have impacted on other causes of death. In fact, we expect higher death rate related to heart strokes and other diseases that require immediate treatment. 
+Another possible future development in order to improve the estimate, is to consider the number of car accident in Italy. Because of the lockdown we expect
+that deaths related to car accidents in Italy have decreased so we thinks that there is a percetage of deaths in our estimate related to this. 
+Also, the second reason is because we have already estimated the number of deaths caused by car accident in Italy in a previous course, so it can be advantageous to integrate it with Covid-19 deaths and see if there are significance changes. 
+Moreover, we would like to conduct other investigations about the impact of COVID-19 on Males and Females, for different age groups and different territories.
+Lastly, we would like to investigate the spread of the virus using also geospatial data.
+We think that what has been done in this investigation could be a good starting point for this kind of analysis.
