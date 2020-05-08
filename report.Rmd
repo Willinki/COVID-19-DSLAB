@@ -1,6 +1,6 @@
 ---
 title: "Statistical analysis of Covid-19 deaths"
-author: "Davide Badalotti, Pietro Bonardi"
+author: "Davide Badalotti [861354], Pietro Bonardi [859505]"
 date: "`r Sys.Date()`"
 output:
   prettydoc::html_pretty:
@@ -71,7 +71,7 @@ The basic idea behind the estimation is:
 4. Then, by analyzing the data referring to the the time interval from 2015 to 2019, we estimate the number of deaths that would have occurred in Lombardy without the impact of Coronavirus.
 5. We then subtract these two values to obtain the increase in deaths for 2020.
 6. We compare this value with the number of Covid-19 related deaths, retrieved from the official datasets from _Protezione Civile Italiana_.
-```{r figurename, echo=FALSE, out.width = '100%'}
+```{r figurename, echo=FALSE, out.width = '80%'}
 knitr::include_graphics("workflow.png")
 ```
 
@@ -164,10 +164,11 @@ We can see that not all 1505 municipalities are contained in the last dataframe,
 This, while it may first seem as an error, does not actually affect the final results.
 We can see, for example, the example of the municipality of `Battuda`. 
 We see that, in the `comune_raw.csv` dataset, this municipality is present only in 5 rows.
-```{r, echo = F}
+```{r, echo = F, message = F, warning = FALSE}
 library(tidyverse)
+library(pander)
 cm_f <- read_csv("data/raw/comune_raw.csv")
-cm_f %>% filter(NOME_COMUNE == "Battuda")
+cm_f %>% filter(NOME_COMUNE == "Battuda") %>% select(NOME_COMUNE, GE, TOTALE_15:TOTALE_20)
 ```
 As we can see, there is no information about the number of deaths in any other day, between 2015 and 2020.
 Looking online, we can see that this municipality has only 655 inhabitants.
@@ -192,7 +193,7 @@ To obtain these values, we made use of these libraries:
 * `tseries`
 
 We obtain:
-```{r, hide = T}
+```{r, echo = F, hide = T, warning = F, message = F, results = F}
 if(!require(tidyverse)) install.packages("tidyverse")
 if(!require(xts)) install.packages("xts")
 if(!require(lubridate)) install.packages("lubridate")
@@ -206,11 +207,11 @@ db_m <- db %>%
 
 decessi_m_ts <- as.xts(db_m$DECESSI_Pday, order.by = as.Date(db_m$MONTH))["/2019"]
 ```
-```{r, echo = F, warning = F}
+```{r, echo = F, warning = F, message = F}
 months(time(decessi_m_ts)) %>% factor() -> mesi
 mesi_dummy <- dummies::dummy(mesi)
 t <- seq_along(decessi_m_ts)
-model2 <- lm(decessi_m_ts ~ mesi_dummy[, -4] + t)
+model3 <- lm(decessi_m_ts ~ mesi_dummy[, -4] + t)
 
 intercept <- summary(model3)[["coefficients"]][1,1] %>% as.integer()
 std <- 2*summary(model3)[["coefficients"]][1,2] %>% as.integer()
@@ -238,7 +239,8 @@ Then, we subtract this value from the estimate of the number of deaths in Lombar
 - The lower estimate is equal to:
   $$D^- = d^- - (d_f + \sigma_{df})$$
 We then compare the value obtained with the number of Covid-19 related deaths according to __Protezione Civile Italiana__.
-```{r, echo = F, message = F, warning = F}
+
+```{r, echo = F, message = F, warning = F, fig.align = "center", out.width = "66%"}
 decessi_covid_comuni <- read_csv("data/comuni_decessi_marzo.csv")
 DEATHS_COVID_C_max <- sum(decessi_covid_comuni$DECESSI_HIGH)
 DEATHS_COVID_C_min <- sum(decessi_covid_comuni$DECESSI_LOW)
@@ -270,18 +272,9 @@ ggplot(data) +
 ```
 
 ### Tableau
-After recovering the Italy geospatial data, we integrate them with the dataset about the deaths during March 2020 in Lombardy municipalities. 
-```{r}
-italycoordinates <- read_csv("italy cordinates/italy_geo.csv")
-names(italycoordinates)[names(italycoordinates) == "comune"] <- "NOME_COMUNE"
-italycoordinates
-marzo_2020 <- read.csv("data/comuni_decessi_marzo.csv")
-xNew = merge (marzo_2020,italycoordinates, by = "NOME_COMUNE")
-xNew <- transform(xNew,longitudine = as.numeric(lng), 
-                    latitudine = as.numeric(lat))
-xNew<- xNew[,-c(6:8)]
-```
+After recovering the Italy geospatial data, we integrate them with the dataset about the deaths during March 2020 in Lombardy municipalities, as shown in `final_notebook.Rmd`.
 So now we can see in another way how catastrophic was the covid-19 during march 2020.
+
 <iframe src="https://public.tableau.com/views/Decessimesemarzo2020Covid-19/Sheet1?:showVizHome=no&:embed=true"width="900" height="900"></iframe>
 
 ---
@@ -294,7 +287,7 @@ Looking at the results from the previos boxplot we can state that:
 * $D^-= 29240$
 * $Report = 7175$
 
-So calculating the ratios: $\eta_{_D{^+}} = \frac{34131}{7175} = 4,75 $ and $\eta_{_D{^-}} = \frac{29240}{7175} = 4$, we can *conclude* that the estimate number of deaths due to Covid-19 compared to the one given by the report is $[4,4.75]$ times larger.  
+So calculating the ratios: $\eta_{_D{^+}} = \frac{34131}{7175} = 4,75$ and $\eta_{_D{^-}} = \frac{29240}{7175} = 4$, we can *conclude* that the estimate number of deaths due to Covid-19 compared to the one given by the report is $[4,4.75]$ times larger.  
 In these project we focus lots of our work in *dataset cleaning*. Infact we produced different type of dataset that potentially could solve this problem in many ways. By the way one of the main dataset cleaning reason is due to the fact that we want to carry on our statistical analysis. 
 In general, we would like to account for the impact of the lockdown on our estimates. For example, the number of car accident related deaths could be much lower then in previous years. Also, the fact that Emergency rooms in hospitals were overcrowded could have impacted on other causes of death. In fact, we expect higher death rate related to heart strokes and other diseases that require immediate treatment. 
 Another possible future development in order to improve the estimate, is to consider the number of car accident in Italy. Because of the lockdown we expect
