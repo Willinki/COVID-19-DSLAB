@@ -20,13 +20,7 @@ knitr::include_graphics("presBicocca.png")###includere immagine della bicocca
 
 Covid-19, as all we know, has caused lots of deaths in Italy. During the last months we get news from many websites such as [Ministero della Salute](http://www.salute.gov.it/portale/nuovocoronavirus/dettaglioContenutiNuovoCoronavirus.jsp?area=nuovoCoronavirus&id=5351&lingua=italiano&menu=vuoto), [Il Sole 24 Ore](https://lab24.ilsole24ore.com/coronavirus/),  and so on, which reports information about this critical situation.
 In this project we analyise Lombardy, since it's the most affected region, and the aim is to estimate the **real number of deaths** and then compare it to the one given by the report. 
-
-To do so, we have to proceed **stepwise**.
-
-```{r figurename, echo=FALSE, out.width = '50%'}
-knitr::include_graphics("workflow.png")
-```
-
+To do so, we have to proceed **stepwise** and first of all by exploring the dataset. 
 
 ### Data Source 
 The dataset used is provided by [ISTAT](https://www.istat.it/it/archivio/240401). It basically show the number of deaths referring to a given date, between 1/01-30/04, and to a given italian's municipalities, among years 2015 and 2020. By the way the complete dataset structure is shown after. 
@@ -37,36 +31,52 @@ In order to consider the **most emergency situations** ISTAT focuses its attenti
 - At least 10 deaths during 4/01/2020 - 4/04/2020.
 - Recorded an increase in deaths of at least 20% or more in the period $1^{st}$ March - $4^{th}$ April 2020, compared to the average data for the same period of the past years 2015-2019
 
+Another things important to underline is that in 2020 there are missing marked as 9999, this indicated that there is no informatios about the number of deaths in that day. 
+
 
 ### Dataset Structure
 The dataset is composed by 27 attribute, in more detail:
 
-* REG: Istat code of the region of residence  
-* PROV: Istat code of the province of residence
-* NOME_REGIONE: the name of the region
-* NOME_PROVINCIA: the name of the province
-* NOME_COMUNE: the name of the municipality
-* DATA_INIZIO_DIFF: Start date of data diffusion for 2020 
-* COD_PROVCOM:City of residence
-* CL_ETA: Age groups
-* GE: Day of death
+* **REG**: Istat code of the region of residence  
+* **PROV**: Istat code of the province of residence
+* **NOME_REGIONE**: the name of the region
+* **NOME_PROVINCIA**: the name of the province
+* **NOME_COMUNE**: the name of the municipality
+* **DATA_INIZIO_DIFF**: Start date of data diffusion for 2020 
+* **COD_PROVCOM**:City of residence
+* **CL_ETA**: Age groups
+* **GE**: Day of death
   For all years from 2015 to 2020 there is a colomn, here summarise as [15-20]
-* MASCHI_[15-20]: the total number of men deaths in [2015-2020]
-* FEMMINE_[15-20]: the total number of females deaths in [2015-2020]
-* TOTALE_[15-20]: the total number of deaths within gender distiction
+* **MASCHI_[15-20]**: the total number of men deaths in [2015-2020]
+* **FEMMINE_[15-20]**: the total number of females deaths in [2015-2020]
+* **TOTALE_[15-20]**: the total number of deaths within gender distiction
+
+### Workflow
+The basic idea behind the estimation is: 
+
+1. We start from our initial dataset and we want to understand the number of death from 2015 to 2020. (Cleaning and Analysis)
+2. We do the same .. ``da qui ripartire``
+
+```{r figurename, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("workflow.png")
+```
 
 
+**Comments**
+
+
+---
  
 # Data cleaning
+The aim in this part is to have........ 
+
 ### Used Libraries 
 * `tidyverse`, the reson why we use this package is due to the fact that some municipalities's sintax contains accents.
 ```{r, include=FALSE}
 if( !require(tidyverse)) install.packages("tidyverse")
 ```
 
-As mention before, we want to analize covid-19 impact on Lombardy, so from the initial dataset: 
-
-* we filter by `NOME_REGIONE==Lombardia`
+As mention before, we want to analize covid-19 impact on Lombardy, so from the initial dataset we filter by `NOME_REGIONE==Lombardia`
 ```{r ,hide=T,echo=F}
 # si importa il dataset con i decessi suddivisi per comune
 db <- read_csv("data/raw/comune_raw.csv", 
@@ -79,9 +89,56 @@ lomb1 <- select(lomb1, -c("REG","NOME_REGIONE"))
 ```
 
 
+In order to make it easy to use for our statistical analysis, we create a new dataset with this attributes:
+
+* **DATA**, type `date`, it is formatted as years, day and month
+* **NOME_PROVINCIA**, type `char`, the provice's names
+* **NOME_COMUNE**, type `char`, the monucipality's names
+* **SESSO**, type `char`, that can be "MASCHI" or "FEMMINE"
+* **DATA_INIZIO_DIFF**, type `char`, Start date of data diffusion for 2020.
+* **DECESSO**, type `double`,the number of deaths for a particular date.
+
+```{r}
+lomb1 <- lomb1 %>% gather(key = "SESSO_ANNO", value = "DECESSO",MASCHI_15:TOTALE_20)
+#2 si divide la colonna "SESSO_ANNO"
+lomb1 <- lomb1 %>% separate(SESSO_ANNO, c("SESSO", "ANNO"), "_") 
+#4 si eliminano i dati mancanti
+lomb1 <- lomb1 %>% mutate(DECESSO = ifelse(DECESSO == 9999, NA, DECESSO))
+#5 si formatta la data
+lomb1 <- lomb1 %>% mutate(DATA = as.Date(paste0(lomb1$GE,lomb1$ANNO), format = "%m%d%y"))
+#5.1 si escludono le date inesistenti
+lomb1 <- lomb1 %>% filter(!is.na(DATA))
+#6 si rimuove la colonna relativa alla classe d'età e si sommano i decessi
+comuni_mf <- lomb1 %>% select(-CL_ETA) %>% 
+  group_by(DATA, NOME_PROVINCIA, NOME_COMUNE, SESSO, DATA_INIZIO_DIFF) %>% 
+  summarise(DECESSO = sum(DECESSO)) %>% 
+  as.data.frame() 
+```
+ -- 
+ 
  
 # Forecasts
  
  
 # Final results
 
+
+### Tableau
+After recovering the Italy geospatial data, we integrate them with the dataset about the deaths in March 2020 in Lombardy municipalities.
+```{r}
+italycoordinates <- read_csv("italy cordinates/italy_geo.csv")
+names(italycoordinates)[names(italycoordinates) == "comune"] <- "NOME_COMUNE"
+italycoordinates
+marzo_2020 <- read.csv("data/comuni_decessi_marzo.csv")
+xNew = merge (marzo_2020,italycoordinates, by = "NOME_COMUNE")
+xNew <- transform(xNew,longitudine = as.numeric(lng), 
+                    latitudine = as.numeric(lat))
+xNew<- xNew[,-c(6:8)]
+```
+
+
+
+So now we can see in another way how catastrophic was the covid-19 during march 2020.
+
+<iframe src="https://public.tableau.com/views/Decessimesemarzo2020Covid-19/Sheet1?:showVizHome=no&:embed=true"
+ width="900" height="900"></iframe>
