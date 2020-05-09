@@ -41,7 +41,7 @@ lomb1 <- lomb1 %>% separate(SESSO_ANNO, c("SESSO", "ANNO"), "_")
 lomb1 <- lomb1 %>% mutate(DECESSO = ifelse(DECESSO == 9999, NA, DECESSO))
 #5 si formatta la data
 lomb1 <- lomb1 %>% mutate(DATA = as.Date(paste0(lomb1$GE,lomb1$ANNO), format = "%m%d%y"))
-#5.1 si escludono le date inesistenti
+#5.1 si escludono le date inesistent
 lomb1 <- lomb1 %>% filter(!is.na(DATA))
 #6 si rimuove la colonna relativa alla classe d'età e si sommano i decessi
 comuni_mf <- lomb1 %>% select(-CL_ETA) %>% 
